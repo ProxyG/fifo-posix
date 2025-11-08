@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  c-dev:
+    build: .
+    container_name: c-pipes-signals-dev
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    command: /workspace/scripts/entrypoint.sh

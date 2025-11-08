@@ -1,0 +1,117 @@
+Projet - UNIX - FIFO (Client/Serveur)
+====================================
+
+Résumé
+------
+Ce projet illustre une communication client/serveur simple sous Unix en
+utilisant des tubes nommés (FIFOs) et des signaux (SIGUSR1) pour la
+notification. Le serveur attend des « questions » envoyées par des clients
+via un FIFO, génère une réponse aléatoire, écrit la réponse dans le second
+FIFO, puis notifie le client par SIGUSR1. Les clients envoient une question
+contenant leur PID et un nombre, attendent le signal, lisent la réponse et
+notifient à leur tour le serveur qu'ils ont traité la réponse.
+
+Contenu du dépôt
+-----------------
+- `serveur.c`       : code source du serveur.
+- `client.c`        : code source du client.
+- `serv_cli_fifo.h` : définitions partagées (structures Question/Reponse,
+  chemins FIFO, constantes).
+- `handlers_serv.h` : handlers de signaux côté serveur.
+- `handlers_cli.h`  : handlers de signaux côté client.
+- `Makefile`        : règles pour compiler (`make` / `make clean`).
+- `Dockerfile` et `docker-compose.yml` : configuration optionnelle pour
+  containerisation (voir section Docker).
+- `scripts/entrypoint.sh` : script d'entrée pour l'image Docker (si utilisé).
+
+Principe / Contrat
+------------------
+- FIFO 1 (défini par `FIFO1` -> `/tmp/fifo1`) : client -> serveur (écriture
+  par client, lecture par serveur).
+- FIFO 2 (défini par `FIFO2` -> `/tmp/fifo2`) : serveur -> client (écriture
+  par serveur, lecture par client).
+- Structure Question :
+  - `pid_client` (pid_t) : PID du client envoyeur
+  - `nombre` (int) : entier envoyé par le client
+- Structure Reponse :
+  - `resultat` (int) : entier renvoyé par le serveur
+
+Signaux
+-------
+- SIGUSR1 est utilisé pour notifier un processus (client ou serveur) que
+  de nouvelles données sont disponibles. Les handlers définissent une
+  variable volatile `reveil` (type `sig_atomic_t`) pour réveiller l'attente
+  sur `pause()`.
+
+Compilation (Linux)
+--------------------------------
+Le code cible un environnement POSIX (Linux). Depuis le répertoire du
+projet, exécutez :
+
+```bash
+make
+```
+
+Cela produit deux exécutables : `serveur` et `client`.
+
+Exemple d'utilisation (Linux)
+------------------------------
+1) Lancer le serveur dans un terminal :
+
+```bash
+./serveur
+```
+
+Le serveur créera (après unlink) les deux FIFOs et attendra des questions.
+
+2) Dans un autre terminal, lancer un client en donnant le PID du serveur
+   et un entier, par exemple si le PID du serveur est 12345 :
+
+```bash
+./client 12345 42
+```
+
+Comportement attendu :
+- Le client écrit une Question dans `/tmp/fifo1` et se met en pause.
+- Le serveur lit la Question, génère un entier aléatoire (0..NMAX-1), écrit
+  une Reponse dans `/tmp/fifo2` et envoie SIGUSR1 au client.
+- Le client est réveillé par SIGUSR1, lit la Reponse depuis `/tmp/fifo2`,
+  affiche le résultat, puis envoie SIGUSR1 au serveur pour l'informer que
+  le traitement local est terminé.
+
+Exemples d'exécution (séquentiel rapide)
+---------------------------------------
+- Terminal A (serveur) :
+  - `./serveur` -> affiche PID et « Serveur prêt... »
+- Terminal B (client) :
+  - `./client <PID_serveur> 7` -> envoie la question, attend, lit réponse,
+    affiche résultat et termine.
+
+Nettoyage
+---------
+Pour supprimer les exécutables et les FIFOs temporaires :
+
+```bash
+make clean
+# ou manuellement
+rm -f serveur client /tmp/fifo1 /tmp/fifo2
+```
+
+Docker (optionnel)
+------------------
+Un `Dockerfile` et un `docker-compose.yml` sont fournis pour exécuter le
+serveur/client dans des conteneurs Linux (depuis PowerShell ou un shell avec Docker):
+
+```powershell
+docker-compose up --build
+```
+
+Détails techniques (pour développeurs)
+-------------------------------------
+- `serv_cli_fifo.h` : contient :
+  - #define NMAX 100
+  - FIFO1 `/tmp/fifo1`, FIFO2 `/tmp/fifo2`
+  - typedef struct Question { pid_t pid_client; int nombre; } Question;
+  - typedef struct Reponse { int resultat; } Reponse;
+- Handlers : les fichiers `handlers_cli.h` et `handlers_serv.h` définissent
+  un handler `hand_reveil` qui positionne `volatile sig_atomic_t reveil = 1`.
