@@ -11,8 +11,8 @@ RUN apt-get update && apt-get install -y \
     make \
     valgrind \
     vim \
+    libgtk-3-dev \
     && rm -rf /var/lib/apt/lists/*
-
 # Set working directory
 WORKDIR /workspace
 
